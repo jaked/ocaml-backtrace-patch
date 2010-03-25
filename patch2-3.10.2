@@ -1,0 +1,35 @@
+diff --git a/bytecomp/meta.mli b/bytecomp/meta.mli
+index 0cbe85a..8c33f61 100644
+--- a/bytecomp/meta.mli
++++ b/bytecomp/meta.mli
+@@ -26,3 +26,7 @@ external invoke_traced_function : Obj.t -> Obj.t -> Obj.t -> Obj.t
+                                 = "caml_invoke_traced_function"
+ external get_section_table : unit -> (string * Obj.t) list
+                                 = "caml_get_section_table"
++external add_debug_info : string -> int -> Instruct.debug_event list array -> unit
++                                = "caml_add_debug_info"
++external remove_debug_info : string -> unit
++                                = "caml_remove_debug_info"
+diff --git a/stdlib/printexc.mli b/stdlib/printexc.mli
+index 434f240..969ab5f 100644
+--- a/stdlib/printexc.mli
++++ b/stdlib/printexc.mli
+@@ -15,6 +15,18 @@
+ 
+ (** Facilities for printing exceptions. *)
+ 
++val capture_backtrace : bool -> unit
++(** [Printexc.capture_backtrace b] turns the capturing of backtraces
++   on if [b] is true, otherwise turns it off. *)
++
++val backtrace_captured : unit -> bool
++(** [Printexc.backtrace_captured ()] returns true iff capturing
++  backtraces is on. *)
++
++val sprint_backtrace : string -> int
++(** [Printexc.sprint_backtrace s] prints the latest exception
++   backtrace into [s] and returns the number of characters written. *)
++
+ val to_string : exn -> string
+ (** [Printexc.to_string e] returns a string representation of
+    the exception [e]. *)
