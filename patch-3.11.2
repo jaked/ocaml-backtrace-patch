@@ -1,7 +1,47 @@
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/asmrun/backtrace.c ocaml-3.11.2.patched/asmrun/backtrace.c
---- ocaml-3.11.2/asmrun/backtrace.c	2008-03-14 09:47:24.000000000 -0400
-+++ ocaml-3.11.2.patched/asmrun/backtrace.c	2010-03-23 23:40:22.000000000 -0400
-@@ -223,3 +223,12 @@
+diff --git a/.depend b/.depend
+index b52df95..d8dbad3 100644
+--- a/.depend
++++ b/.depend
+@@ -295,7 +295,7 @@ bytecomp/lambda.cmi: typing/types.cmi typing/primitive.cmi typing/path.cmi \
+     parsing/location.cmi typing/ident.cmi typing/env.cmi parsing/asttypes.cmi 
+ bytecomp/matching.cmi: typing/typedtree.cmi parsing/location.cmi \
+     bytecomp/lambda.cmi typing/ident.cmi parsing/asttypes.cmi 
+-bytecomp/meta.cmi: 
++bytecomp/meta.cmi: bytecomp/instruct.cmi
+ bytecomp/printinstr.cmi: bytecomp/instruct.cmi 
+ bytecomp/printlambda.cmi: bytecomp/lambda.cmi 
+ bytecomp/runtimedef.cmi: 
+@@ -384,8 +384,8 @@ bytecomp/matching.cmx: typing/types.cmx bytecomp/typeopt.cmx \
+     parsing/location.cmx bytecomp/lambda.cmx typing/ident.cmx typing/env.cmx \
+     utils/clflags.cmx typing/btype.cmx parsing/asttypes.cmi \
+     bytecomp/matching.cmi 
+-bytecomp/meta.cmo: bytecomp/meta.cmi 
+-bytecomp/meta.cmx: bytecomp/meta.cmi 
++bytecomp/meta.cmo: bytecomp/instruct.cmi bytecomp/meta.cmi 
++bytecomp/meta.cmx: bytecomp/instruct.cmx bytecomp/meta.cmi 
+ bytecomp/opcodes.cmo: 
+ bytecomp/opcodes.cmx: 
+ bytecomp/printinstr.cmo: bytecomp/printlambda.cmi parsing/location.cmi \
+diff --git a/Makefile b/Makefile
+index 80c6824..548cbcf 100644
+--- a/Makefile
++++ b/Makefile
+@@ -19,8 +19,8 @@ include stdlib/StdlibModules
+ 
+ CAMLC=boot/ocamlrun boot/ocamlc -nostdlib -I boot
+ CAMLOPT=boot/ocamlrun ./ocamlopt -nostdlib -I stdlib -I otherlibs/dynlink
+-COMPFLAGS=-warn-error A $(INCLUDES)
+-LINKFLAGS=
++COMPFLAGS=-g -warn-error A $(INCLUDES)
++LINKFLAGS=-g
+ 
+ CAMLYACC=boot/ocamlyacc
+ YACCFLAGS=-v
+diff --git a/asmrun/backtrace.c b/asmrun/backtrace.c
+index a875822..228f6e6 100644
+--- a/asmrun/backtrace.c
++++ b/asmrun/backtrace.c
+@@ -223,3 +223,12 @@ CAMLprim value caml_get_exception_backtrace(value unit)
    CAMLreturn(res);
  }
  
@@ -14,15 +54,11 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
 +{
 +  return Val_unit;
 +}
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/boot/camlheader ocaml-3.11.2.patched/boot/camlheader
---- ocaml-3.11.2/boot/camlheader	1969-12-31 19:00:00.000000000 -0500
-+++ ocaml-3.11.2.patched/boot/camlheader	2010-03-23 21:04:49.000000000 -0400
-@@ -0,0 +1 @@
-+#!/home/jake/ocaml-3.11.2/bin/ocamlrun
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/bytecomp/emitcode.ml ocaml-3.11.2.patched/bytecomp/emitcode.ml
---- ocaml-3.11.2/bytecomp/emitcode.ml	2008-07-24 01:35:22.000000000 -0400
-+++ ocaml-3.11.2.patched/bytecomp/emitcode.ml	2010-03-23 20:15:55.000000000 -0400
-@@ -395,8 +395,9 @@
+diff --git a/bytecomp/emitcode.ml b/bytecomp/emitcode.ml
+index 755873d..11cbce7 100644
+--- a/bytecomp/emitcode.ml
++++ b/bytecomp/emitcode.ml
+@@ -395,8 +395,9 @@ let to_memory init_code fun_code =
    String.unsafe_blit !out_buffer 0 code 0 !out_position;
    let reloc = List.rev !reloc_info
    and code_size = !out_position in
@@ -33,10 +69,11 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
  
  (* Emission to a file for a packed library *)
  
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/bytecomp/emitcode.mli ocaml-3.11.2.patched/bytecomp/emitcode.mli
---- ocaml-3.11.2/bytecomp/emitcode.mli	2006-05-11 11:50:53.000000000 -0400
-+++ ocaml-3.11.2.patched/bytecomp/emitcode.mli	2010-03-23 20:15:15.000000000 -0400
-@@ -23,7 +23,7 @@
+diff --git a/bytecomp/emitcode.mli b/bytecomp/emitcode.mli
+index 6c78f04..7d7f71c 100644
+--- a/bytecomp/emitcode.mli
++++ b/bytecomp/emitcode.mli
+@@ -23,7 +23,7 @@ val to_file: out_channel -> string -> instruction list -> unit
               name of compilation unit implemented
               list of instructions to emit *)
  val to_memory: instruction list -> instruction list ->
@@ -45,10 +82,11 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
          (* Arguments:
               initialization code (terminated by STOP)
               function code
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/bytecomp/meta.ml ocaml-3.11.2.patched/bytecomp/meta.ml
---- ocaml-3.11.2/bytecomp/meta.ml	2004-04-16 09:46:43.000000000 -0400
-+++ ocaml-3.11.2.patched/bytecomp/meta.ml	2010-03-23 20:18:41.000000000 -0400
-@@ -24,3 +24,7 @@
+diff --git a/bytecomp/meta.ml b/bytecomp/meta.ml
+index 3e2cdeb..53cd883 100644
+--- a/bytecomp/meta.ml
++++ b/bytecomp/meta.ml
+@@ -24,3 +24,7 @@ external invoke_traced_function : Obj.t -> Obj.t -> Obj.t -> Obj.t
                                  = "caml_invoke_traced_function"
  external get_section_table : unit -> (string * Obj.t) list
                                  = "caml_get_section_table"
@@ -56,21 +94,11 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
 +                                = "caml_add_debug_info"
 +external remove_debug_info : string -> unit
 +                                = "caml_remove_debug_info"
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/bytecomp/meta.mli ocaml-3.11.2.patched/bytecomp/meta.mli
---- ocaml-3.11.2/bytecomp/meta.mli	2004-04-16 09:46:43.000000000 -0400
-+++ ocaml-3.11.2.patched/bytecomp/meta.mli	2010-03-23 20:18:20.000000000 -0400
-@@ -26,3 +26,7 @@
-                                 = "caml_invoke_traced_function"
- external get_section_table : unit -> (string * Obj.t) list
-                                 = "caml_get_section_table"
-+external add_debug_info : string -> int -> Instruct.debug_event list array -> unit
-+                                = "caml_add_debug_info"
-+external remove_debug_info : string -> unit
-+                                = "caml_remove_debug_info"
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/byterun/backtrace.c ocaml-3.11.2.patched/byterun/backtrace.c
---- ocaml-3.11.2/byterun/backtrace.c	2009-06-18 07:17:16.000000000 -0400
-+++ ocaml-3.11.2.patched/byterun/backtrace.c	2010-03-23 20:42:06.000000000 -0400
-@@ -39,6 +39,7 @@
+diff --git a/byterun/backtrace.c b/byterun/backtrace.c
+index 304fe44..2d593af 100644
+--- a/byterun/backtrace.c
++++ b/byterun/backtrace.c
+@@ -39,6 +39,7 @@ CAMLexport int caml_backtrace_active = 0;
  CAMLexport int caml_backtrace_pos = 0;
  CAMLexport code_t * caml_backtrace_buffer = NULL;
  CAMLexport value caml_backtrace_last_exn = Val_unit;
@@ -78,7 +106,7 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
  CAMLexport char * caml_cds_file = NULL;
  #define BACKTRACE_BUFFER_SIZE 1024
  
-@@ -61,6 +62,49 @@
+@@ -61,6 +62,49 @@ enum {
    POS_CNUM = 3
  };
  
@@ -128,7 +156,7 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
  /* Start or stop the backtrace machinery */
  
  CAMLprim value caml_record_backtrace(value vflag)
-@@ -94,7 +138,6 @@
+@@ -94,7 +138,6 @@ CAMLprim value caml_backtrace_status(value vunit)
  
  void caml_stash_backtrace(value exn, code_t pc, value * sp)
  {
@@ -136,7 +164,7 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
    if (pc != NULL) pc = pc - 1;
    if (exn != caml_backtrace_last_exn) {
      caml_backtrace_pos = 0;
-@@ -105,14 +148,30 @@
+@@ -105,14 +148,30 @@ void caml_stash_backtrace(value exn, code_t pc, value * sp)
      if (caml_backtrace_buffer == NULL) return;
    }
    if (caml_backtrace_pos >= BACKTRACE_BUFFER_SIZE) return;
@@ -171,7 +199,7 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
      }
    }
  }
-@@ -125,68 +184,72 @@
+@@ -125,68 +184,72 @@ void caml_stash_backtrace(value exn, code_t pc, value * sp)
  #define O_BINARY 0
  #endif
  
@@ -218,7 +246,7 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
 +    events = caml_alloc(num_events, 0);
 +    for (i = 0; i < num_events; i++) {
 +      orig = caml_getword(chan);
-+      evl = caml_input_val(chan);
++      evl = caml_input_val_(chan, 1);
 +      /* Relocate events in event list */
 +      for (l = evl; l != Val_int(0); l = Field(l, 1)) {
        value ev = Field(l, 0);
@@ -284,7 +312,7 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
    return Val_false;
  }
  
-@@ -201,12 +264,12 @@
+@@ -201,12 +264,12 @@ struct loc_info {
    int loc_endchr;
  };
  
@@ -299,7 +327,7 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
    li->loc_is_raise = caml_is_instruction(*pc, RAISE);
    if (ev == Val_false) {
      li->loc_valid = 0;
-@@ -258,18 +321,16 @@
+@@ -258,18 +321,16 @@ static void print_location(struct loc_info * li, int index)
  
  CAMLexport void caml_print_exception_backtrace(void)
  {
@@ -320,7 +348,7 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
      print_location(&li, i);
    }
  }
-@@ -279,17 +340,16 @@
+@@ -279,17 +340,16 @@ CAMLexport void caml_print_exception_backtrace(void)
  CAMLprim value caml_get_exception_backtrace(value unit)
  {
    CAMLparam0();
@@ -341,9 +369,10 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
        if (li.loc_valid) {
          fname = caml_copy_string(li.loc_filename);
          p = caml_alloc_small(5, 0);
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/byterun/backtrace.h ocaml-3.11.2.patched/byterun/backtrace.h
---- ocaml-3.11.2/byterun/backtrace.h	2009-06-18 07:17:16.000000000 -0400
-+++ ocaml-3.11.2.patched/byterun/backtrace.h	2010-03-23 20:44:44.000000000 -0400
+diff --git a/byterun/backtrace.h b/byterun/backtrace.h
+index f3327d0..ef39061 100644
+--- a/byterun/backtrace.h
++++ b/byterun/backtrace.h
 @@ -17,6 +17,7 @@
  #define CAML_BACKTRACE_H
  
@@ -352,17 +381,98 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
  
  CAMLextern int caml_backtrace_active;
  CAMLextern int caml_backtrace_pos;
-@@ -29,5 +30,6 @@
+@@ -29,5 +30,6 @@ CAMLprim value caml_record_backtrace(value vflag);
  extern void caml_stash_backtrace(value exn, code_t pc, value * sp);
  #endif
  CAMLextern void caml_print_exception_backtrace(void);
 +CAMLextern void caml_read_debug_info(int fd, struct exec_trailer *trail);
  
  #endif /* CAML_BACKTRACE_H */
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/byterun/io.c ocaml-3.11.2.patched/byterun/io.c
---- ocaml-3.11.2/byterun/io.c	2007-02-25 07:38:36.000000000 -0500
-+++ ocaml-3.11.2.patched/byterun/io.c	2010-03-23 20:45:51.000000000 -0400
-@@ -103,6 +103,12 @@
+diff --git a/byterun/intern.c b/byterun/intern.c
+index 78972f6..7361a67 100644
+--- a/byterun/intern.c
++++ b/byterun/intern.c
+@@ -324,7 +324,7 @@ static void intern_rec(value *dest)
+   *dest = v;
+ }
+ 
+-static void intern_alloc(mlsize_t whsize, mlsize_t num_objects)
++static void intern_alloc_(mlsize_t whsize, mlsize_t num_objects, int out_of_heap)
+ {
+   mlsize_t wosize;
+ 
+@@ -335,7 +335,7 @@ static void intern_alloc(mlsize_t whsize, mlsize_t num_objects)
+     return;
+   }
+   wosize = Wosize_whsize(whsize);
+-  if (wosize > Max_wosize) {
++  if (wosize > Max_wosize || out_of_heap) {
+     /* Round desired size up to next page */
+     asize_t request =
+       ((Bsize_wsize(whsize) + Page_size - 1) >> Page_log) << Page_log;
+@@ -367,6 +367,11 @@ static void intern_alloc(mlsize_t whsize, mlsize_t num_objects)
+     intern_obj_table = NULL;
+ }
+ 
++static void intern_alloc(mlsize_t whsize, mlsize_t num_objects)
++{
++  intern_alloc_(whsize, num_objects, 0);
++}
++
+ static void intern_add_to_heap(mlsize_t whsize)
+ {
+   /* Add new heap chunk to heap if needed */
+@@ -387,7 +392,7 @@ static void intern_add_to_heap(mlsize_t whsize)
+   }
+ }
+ 
+-value caml_input_val(struct channel *chan)
++value caml_input_val_(struct channel *chan, int out_of_heap)
+ {
+   uint32 magic;
+   mlsize_t block_len, num_objects, size_32, size_64, whsize;
+@@ -421,16 +426,22 @@ value caml_input_val(struct channel *chan)
+ #else
+   whsize = size_32;
+ #endif
+-  intern_alloc(whsize, num_objects);
++  intern_alloc_(whsize, num_objects, out_of_heap);
+   /* Fill it in */
+   intern_rec(&res);
+-  intern_add_to_heap(whsize);
++  if (!out_of_heap)
++    intern_add_to_heap(whsize);
+   /* Free everything */
+   caml_stat_free(intern_input);
+   if (intern_obj_table != NULL) caml_stat_free(intern_obj_table);
+   return res;
+ }
+ 
++value caml_input_val(struct channel *chan)
++{
++  return caml_input_val_(chan, 0);
++}
++
+ CAMLprim value caml_input_value(value vchan)
+ {
+   CAMLparam1 (vchan);
+diff --git a/byterun/intext.h b/byterun/intext.h
+index de0ef68..93642ba 100644
+--- a/byterun/intext.h
++++ b/byterun/intext.h
+@@ -97,6 +97,7 @@ CAMLextern intnat caml_output_value_to_block(value v, value flags,
+ /* <private> */
+ value caml_input_val (struct channel * chan);
+   /* Read a structured value from the channel [chan]. */
++value caml_input_val_ (struct channel * chan, int out_of_heap);
+ /* </private> */
+ 
+ CAMLextern value caml_input_val_from_string (value str, intnat ofs);
+diff --git a/byterun/io.c b/byterun/io.c
+index c72fc4d..f9feb82 100644
+--- a/byterun/io.c
++++ b/byterun/io.c
+@@ -103,6 +103,12 @@ static void unlink_channel(struct channel *channel)
  CAMLexport void caml_close_channel(struct channel *channel)
  {
    close(channel->fd);
@@ -375,10 +485,11 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
    if (channel->refcount > 0) return;
    if (caml_channel_mutex_free != NULL) (*caml_channel_mutex_free)(channel);
    unlink_channel(channel);
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/byterun/io.h ocaml-3.11.2.patched/byterun/io.h
---- ocaml-3.11.2/byterun/io.h	2008-09-27 17:16:29.000000000 -0400
-+++ ocaml-3.11.2.patched/byterun/io.h	2010-03-23 20:45:06.000000000 -0400
-@@ -77,6 +77,7 @@
+diff --git a/byterun/io.h b/byterun/io.h
+index e43d5ec..a0c12fc 100644
+--- a/byterun/io.h
++++ b/byterun/io.h
+@@ -77,6 +77,7 @@ enum {
  CAMLextern struct channel * caml_open_descriptor_in (int);
  CAMLextern struct channel * caml_open_descriptor_out (int);
  CAMLextern void caml_close_channel (struct channel *);
@@ -386,10 +497,11 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
  CAMLextern int caml_channel_binary_mode (struct channel *);
  CAMLextern value caml_alloc_channel(struct channel *chan);
  
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/byterun/startup.c ocaml-3.11.2.patched/byterun/startup.c
---- ocaml-3.11.2/byterun/startup.c	2009-06-18 07:17:16.000000000 -0400
-+++ ocaml-3.11.2.patched/byterun/startup.c	2010-03-23 20:47:58.000000000 -0400
-@@ -399,6 +399,7 @@
+diff --git a/byterun/startup.c b/byterun/startup.c
+index ecddfe4..3c9441a 100644
+--- a/byterun/startup.c
++++ b/byterun/startup.c
+@@ -399,6 +399,7 @@ CAMLexport void caml_main(char **argv)
    caml_stat_free(shared_lib_path);
    caml_stat_free(shared_libs);
    caml_stat_free(req_prims);
@@ -397,47 +509,11 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
    /* Load the globals */
    caml_seek_section(fd, &trail, "DATA");
    chan = caml_open_descriptor_in(fd);
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/.depend ocaml-3.11.2.patched/.depend
---- ocaml-3.11.2/.depend	2009-05-19 10:46:21.000000000 -0400
-+++ ocaml-3.11.2.patched/.depend	2010-03-23 21:31:45.000000000 -0400
-@@ -295,7 +295,7 @@
-     parsing/location.cmi typing/ident.cmi typing/env.cmi parsing/asttypes.cmi 
- bytecomp/matching.cmi: typing/typedtree.cmi parsing/location.cmi \
-     bytecomp/lambda.cmi typing/ident.cmi parsing/asttypes.cmi 
--bytecomp/meta.cmi: 
-+bytecomp/meta.cmi: bytecomp/instruct.cmi
- bytecomp/printinstr.cmi: bytecomp/instruct.cmi 
- bytecomp/printlambda.cmi: bytecomp/lambda.cmi 
- bytecomp/runtimedef.cmi: 
-@@ -384,8 +384,8 @@
-     parsing/location.cmx bytecomp/lambda.cmx typing/ident.cmx typing/env.cmx \
-     utils/clflags.cmx typing/btype.cmx parsing/asttypes.cmi \
-     bytecomp/matching.cmi 
--bytecomp/meta.cmo: bytecomp/meta.cmi 
--bytecomp/meta.cmx: bytecomp/meta.cmi 
-+bytecomp/meta.cmo: bytecomp/instruct.cmi bytecomp/meta.cmi 
-+bytecomp/meta.cmx: bytecomp/instruct.cmx bytecomp/meta.cmi 
- bytecomp/opcodes.cmo: 
- bytecomp/opcodes.cmx: 
- bytecomp/printinstr.cmo: bytecomp/printlambda.cmi parsing/location.cmi \
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/Makefile ocaml-3.11.2.patched/Makefile
---- ocaml-3.11.2/Makefile	2009-12-18 18:04:13.000000000 -0500
-+++ ocaml-3.11.2.patched/Makefile	2010-03-23 20:49:07.000000000 -0400
-@@ -19,8 +19,8 @@
- 
- CAMLC=boot/ocamlrun boot/ocamlc -nostdlib -I boot
- CAMLOPT=boot/ocamlrun ./ocamlopt -nostdlib -I stdlib -I otherlibs/dynlink
--COMPFLAGS=-warn-error A $(INCLUDES)
--LINKFLAGS=
-+COMPFLAGS=-g -warn-error A $(INCLUDES)
-+LINKFLAGS=-g
- 
- CAMLYACC=boot/ocamlyacc
- YACCFLAGS=-v
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/otherlibs/dynlink/dynlink.ml ocaml-3.11.2.patched/otherlibs/dynlink/dynlink.ml
---- ocaml-3.11.2/otherlibs/dynlink/dynlink.ml	2008-04-22 08:24:10.000000000 -0400
-+++ ocaml-3.11.2.patched/otherlibs/dynlink/dynlink.ml	2010-03-23 20:49:35.000000000 -0400
-@@ -188,6 +188,13 @@
+diff --git a/otherlibs/dynlink/dynlink.ml b/otherlibs/dynlink/dynlink.ml
+index e340615..40f8979 100644
+--- a/otherlibs/dynlink/dynlink.ml
++++ b/otherlibs/dynlink/dynlink.ml
+@@ -188,6 +188,13 @@ let load_compunit ic file_name compunit =
        | _ -> assert false in
      raise(Error(Linking_error (file_name, new_error)))
    end;
@@ -451,10 +527,11 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
    begin try
      ignore((Meta.reify_bytecode code code_size) ())
    with exn ->
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/toplevel/topdirs.ml ocaml-3.11.2.patched/toplevel/topdirs.ml
---- ocaml-3.11.2/toplevel/topdirs.ml	2008-11-18 21:35:40.000000000 -0500
-+++ ocaml-3.11.2.patched/toplevel/topdirs.ml	2010-03-23 20:53:43.000000000 -0400
-@@ -74,11 +74,19 @@
+diff --git a/toplevel/topdirs.ml b/toplevel/topdirs.ml
+index d45b4f7..363e419 100644
+--- a/toplevel/topdirs.ml
++++ b/toplevel/topdirs.ml
+@@ -74,11 +74,19 @@ let load_compunit ic filename ppf compunit =
    let initial_symtable = Symtable.current_state() in
    Symtable.patch_object code compunit.cu_reloc;
    Symtable.update_global_table();
@@ -474,7 +551,7 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
      may_trace := false;
      Symtable.restore_state initial_symtable;
      print_exception_outcome ppf exn;
-@@ -301,4 +309,10 @@
+@@ -301,4 +309,10 @@ let _ =
               (Directive_string (parse_warnings std_out false));
  
    Hashtbl.add directive_table "warn_error"
@@ -486,10 +563,11 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
 +
 +  Hashtbl.add directive_table "record_backtrace"
 +             (Directive_bool(fun b -> Printexc.record_backtrace b))
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/toplevel/toploop.ml ocaml-3.11.2.patched/toplevel/toploop.ml
---- ocaml-3.11.2/toplevel/toploop.ml	2007-12-04 08:38:58.000000000 -0500
-+++ ocaml-3.11.2.patched/toplevel/toploop.ml	2010-03-23 21:02:29.000000000 -0400
-@@ -114,6 +114,12 @@
+diff --git a/toplevel/toploop.ml b/toplevel/toploop.ml
+index 2a6ff83..898123b 100644
+--- a/toplevel/toploop.ml
++++ b/toplevel/toploop.ml
+@@ -114,6 +114,12 @@ let toplevel_startup_hook = ref (fun () -> ())
  let may_trace = ref false (* Global lock on tracing *)
  type evaluation_outcome = Result of Obj.t | Exception of exn
  
@@ -502,7 +580,7 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
  let load_lambda ppf lam =
    if !Clflags.dump_rawlambda then fprintf ppf "%a@." Printlambda.lambda lam;
    let slam = Simplif.simplify_lambda lam in
-@@ -123,7 +129,8 @@
+@@ -123,7 +129,8 @@ let load_lambda ppf lam =
      fprintf ppf "%a%a@."
      Printinstr.instrlist init_code
      Printinstr.instrlist fun_code;
@@ -512,7 +590,7 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
    let can_free = (fun_code = []) in
    let initial_symtable = Symtable.current_state() in
    Symtable.patch_object code reloc;
-@@ -134,13 +141,16 @@
+@@ -134,13 +141,16 @@ let load_lambda ppf lam =
      let retval = (Meta.reify_bytecode code code_size) () in
      may_trace := false;
      if can_free then begin
@@ -529,7 +607,7 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
        Meta.static_release_bytecode code code_size;
        Meta.static_free code;
      end;
-@@ -204,7 +214,14 @@
+@@ -204,7 +214,14 @@ let print_out_exception ppf exn outv =
  let print_exception_outcome ppf exn =
    if exn = Out_of_memory then Gc.full_major ();
    let outv = outval_of_value !toplevel_env (Obj.repr exn) Predef.type_exn in
@@ -545,7 +623,7 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
  
  (* The table of toplevel directives.
     Filled by functions from module topdirs. *)
-@@ -249,6 +266,15 @@
+@@ -249,6 +266,15 @@ let execute_phrase print_outcome ppf phr =
                Ophr_exception (exn, outv)
          in
          !print_out_phrase ppf out_phr;
@@ -561,10 +639,11 @@ diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x m
          begin match out_phr with
          | Ophr_eval (_, _) | Ophr_signature _ -> true
          | Ophr_exception _ -> false
-diff -Naur -x asmcomp -x config.sh -x TAGS -x '*.cmi' -x '*.cmo' -x '*.cma' -x myocamlbuild -x ocamlrun -x ocamlyacc ocaml-3.11.2/toplevel/toploop.mli ocaml-3.11.2.patched/toplevel/toploop.mli
---- ocaml-3.11.2/toplevel/toploop.mli	2007-12-04 08:38:58.000000000 -0500
-+++ ocaml-3.11.2.patched/toplevel/toploop.mli	2010-03-23 21:03:04.000000000 -0400
-@@ -62,6 +62,7 @@
+diff --git a/toplevel/toploop.mli b/toplevel/toploop.mli
+index be9c27b..83a8eb5 100644
+--- a/toplevel/toploop.mli
++++ b/toplevel/toploop.mli
+@@ -62,6 +62,7 @@ val use_silently : formatter -> string -> bool
             [use_silently] does not print them. *)
  val eval_path: Path.t -> Obj.t
          (* Return the toplevel object referred to by the given path *)
