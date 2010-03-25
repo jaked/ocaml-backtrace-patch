@@ -1,0 +1,860 @@
+diff -Naur ocaml-3.10.0/asmrun/backtrace.c ocaml-3.10.0-backtrace/asmrun/backtrace.c
+--- ocaml-3.10.0/asmrun/backtrace.c        2007-01-29 04:10:52.000000000 -0800
++++ ocaml-3.10.0-backtrace/asmrun/backtrace.c         2007-11-02 13:53:57.000000000 -0700
+@@ -97,7 +97,7 @@
+ 
+ /* Print a backtrace */
+ 
+-static void print_location(int index, frame_descr * d)
++static int snprint_location(char *s, int len, int index, frame_descr * d)
+ {
+   uintnat infoptr;
+   uint32 info1, info2, k, n, l, a, b;
+@@ -106,7 +106,7 @@
+   /* If no debugging information available, print nothing.
+      When everything is compiled with -g, this corresponds to 
+      compiler-inserted re-raise operations. */
+-  if ((d->frame_size & 1) == 0) return;
++  if ((d->frame_size & 1) == 0) return 0;
+   /* Recover debugging info */
+   infoptr = ((uintnat) d +
+              sizeof(char *) + sizeof(short) + sizeof(short) +
+@@ -136,14 +136,65 @@
+   else
+     kind = "Called from";
+ 
+-  fprintf(stderr, "%s file \"%s\", line %d, characters %d-%d\n",
+-          kind, ((char *) infoptr) + n, l, a, b);
++  char *fmt = "%s file \"%s\", line %d, characters %d-%d\n";
++  if (s)
++    return snprintf(s, len, fmt, kind, ((char *) infoptr) + n, l, a, b);
++  else {
++    fprintf(stderr, fmt, kind, ((char *) infoptr) + n, l, a, b);
++    return 0;
++  }
+ }
+ 
+-void caml_print_exception_backtrace(void)
++static int snprint_exception_backtrace(char *s, int len)
+ {
+   int i;
+ 
++  int total_chars = 0;
+   for (i = 0; i < caml_backtrace_pos; i++)
+-    print_location(i, (frame_descr *) caml_backtrace_buffer[i]);
++  {
++    int chars = snprint_location(s, len, i, (frame_descr *) caml_backtrace_buffer[i]);
++    total_chars += chars;
++    s += chars;
++    len -= chars;
++  }
++  return total_chars;
++}
++
++void caml_print_exception_backtrace(void)
++{
++  snprint_exception_backtrace(0, 0);
++}
++
++CAMLprim value caml_sprint_backtrace(value sv)
++{
++  if (caml_backtrace_active)
++  {
++    int len = caml_string_length(sv);
++    char *s = String_val(sv);
++    int chars = snprint_exception_backtrace(s, len);
++    return Val_int(chars);
++  }
++  else
++    return Val_int(0);
++}
++
++CAMLprim value caml_capture_backtrace(value on)
++{
++  if (Bool_val(on))
++  {
++    caml_backtrace_active = 1;
++    caml_register_global_root(&caml_backtrace_last_exn);
++  }
++  else
++  {
++    caml_backtrace_active = 0;
++    caml_remove_global_root(&caml_backtrace_last_exn);
++    caml_backtrace_last_exn = Val_unit;
++  }
++  return Val_unit;
++}
++
++CAMLprim value caml_backtrace_captured(value unit)
++{
++  return caml_backtrace_active ? Val_true : Val_false;
+ }
+diff -Naur ocaml-3.10.0/bytecomp/emitcode.ml ocaml-3.10.0-backtrace/bytecomp/emitcode.ml
+--- ocaml-3.10.0/bytecomp/emitcode.ml        2006-05-11 08:50:53.000000000 -0700
++++ ocaml-3.10.0-backtrace/bytecomp/emitcode.ml         2007-11-02 13:53:57.000000000 -0700
+@@ -395,8 +395,9 @@
+   String.unsafe_blit !out_buffer 0 code 0 !out_position;
+   let reloc = List.rev !reloc_info
+   and code_size = !out_position in
++  let events = !events in
+   init();
+-  (code, code_size, reloc)
++  (code, code_size, reloc, events)
+ 
+ (* Emission to a file for a packed library *)
+ 
+diff -Naur ocaml-3.10.0/bytecomp/emitcode.mli ocaml-3.10.0-backtrace/bytecomp/emitcode.mli
+--- ocaml-3.10.0/bytecomp/emitcode.mli        2006-05-11 08:50:53.000000000 -0700
++++ ocaml-3.10.0-backtrace/bytecomp/emitcode.mli         2007-11-02 13:53:57.000000000 -0700
+@@ -23,7 +23,7 @@
+              name of compilation unit implemented
+              list of instructions to emit *)
+ val to_memory: instruction list -> instruction list ->
+-                    string * int * (reloc_info * int) list
++                    string * int * (reloc_info * int) list * debug_event list
+         (* Arguments:
+              initialization code (terminated by STOP)
+              function code
+diff -Naur ocaml-3.10.0/bytecomp/meta.ml ocaml-3.10.0-backtrace/bytecomp/meta.ml
+--- ocaml-3.10.0/bytecomp/meta.ml        2004-04-16 06:46:20.000000000 -0700
++++ ocaml-3.10.0-backtrace/bytecomp/meta.ml         2007-11-02 13:53:57.000000000 -0700
+@@ -24,3 +24,6 @@
+                                 = "caml_invoke_traced_function"
+ external get_section_table : unit -> (string * Obj.t) list
+                                 = "caml_get_section_table"
++
++external add_debug_info : string -> int -> Instruct.debug_event list array -> unit = "caml_add_debug_info"
++external remove_debug_info : string -> unit = "caml_remove_debug_info"
+diff -Naur ocaml-3.10.0/bytecomp/meta.mli ocaml-3.10.0-backtrace/bytecomp/meta.mli
+--- ocaml-3.10.0/bytecomp/meta.mli        2004-04-16 06:46:27.000000000 -0700
++++ ocaml-3.10.0-backtrace/bytecomp/meta.mli         2007-11-02 13:53:57.000000000 -0700
+@@ -26,3 +26,8 @@
+                                 = "caml_invoke_traced_function"
+ external get_section_table : unit -> (string * Obj.t) list
+                                 = "caml_get_section_table"
++external add_debug_info : string -> int -> Instruct.debug_event list array -> unit
++                                = "caml_add_debug_info"
++external remove_debug_info : string -> unit
++                                = "caml_remove_debug_info"
++
+diff -Naur ocaml-3.10.0/byterun/backtrace.c ocaml-3.10.0-backtrace/byterun/backtrace.c
+--- ocaml-3.10.0/byterun/backtrace.c        2007-01-29 04:11:15.000000000 -0800
++++ ocaml-3.10.0-backtrace/byterun/backtrace.c         2007-11-02 13:53:57.000000000 -0700
+@@ -38,6 +38,7 @@
+ CAMLexport int caml_backtrace_pos = 0;
+ CAMLexport code_t * caml_backtrace_buffer = NULL;
+ CAMLexport value caml_backtrace_last_exn = Val_unit;
++CAMLexport value caml_debug_info = Val_emptylist;
+ #define BACKTRACE_BUFFER_SIZE 1024
+ 
+ /* Location of fields in the Instruct.debug_event record */
+@@ -59,6 +60,49 @@
+   POS_CNUM = 3
+ };
+ 
++/* Location of fields in the caml_debug_info records */;
++enum {
++  DI_START = 0,
++  DI_SIZE = 1,
++  DI_EVENTS = 2
++};
++
++CAMLprim value caml_add_debug_info(code_t start, value size, value events)
++{
++  CAMLparam1(events);
++  CAMLlocal1(debug_info);
++  debug_info = caml_alloc(3, 0);
++  Store_field(debug_info, DI_START, (value)start);
++  Store_field(debug_info, DI_SIZE, size);
++  Store_field(debug_info, DI_EVENTS, events);
++  value cons = caml_alloc(2, 0);
++  Store_field(cons, 0, debug_info);
++  Store_field(cons, 1, caml_debug_info);
++  caml_debug_info = cons;
++  CAMLreturn(Val_unit);
++}
++
++CAMLprim value caml_remove_debug_info(code_t start)
++{
++  CAMLparam0();
++  value dis = caml_debug_info;
++  value prev = 0;
++  while (dis != Val_emptylist) {
++    value di = Field(dis, 0);
++    code_t di_start = (code_t)Field(di, DI_START);
++    if (di_start == start) {
++      if (prev)
++      Store_field(prev, 1, Field(dis, 1));
++      else
++      caml_debug_info = Field(dis, 1);
++      break;
++    }
++    prev = di;
++    dis = Field(dis, 1);
++  }
++  CAMLreturn(Val_unit);
++}
++
+ /* Initialize the backtrace machinery */
+ 
+ void caml_init_backtrace(void)
+@@ -74,7 +118,6 @@
+ 
+ void caml_stash_backtrace(value exn, code_t pc, value * sp)
+ {
+-  code_t end_code = (code_t) ((char *) caml_start_code + caml_code_size);
+   if (pc != NULL) pc = pc - 1;
+   if (exn != caml_backtrace_last_exn) {
+     caml_backtrace_pos = 0;
+@@ -85,14 +128,30 @@
+     if (caml_backtrace_buffer == NULL) return;
+   }
+   if (caml_backtrace_pos >= BACKTRACE_BUFFER_SIZE) return;
+-  if (pc >= caml_start_code && pc < end_code){
+-    caml_backtrace_buffer[caml_backtrace_pos++] = pc;
++  value dis = caml_debug_info;
++  while (dis != Val_emptylist) {
++    value di = Field(dis, 0);
++    code_t start = (code_t)Field(di, DI_START);
++    code_t end = start + Int_val(Field(di, DI_SIZE));
++    if (pc >= start && pc < end){
++      caml_backtrace_buffer[caml_backtrace_pos++] = pc;
++      break;
++    }
++    dis = Field(dis, 1);
+   }
+   for (/*nothing*/; sp < caml_trapsp; sp++) {
++    if (caml_backtrace_pos >= BACKTRACE_BUFFER_SIZE) break;
+     code_t p = (code_t) *sp;
+-    if (p >= caml_start_code && p < end_code) {
+-      if (caml_backtrace_pos >= BACKTRACE_BUFFER_SIZE) break;
+-      caml_backtrace_buffer[caml_backtrace_pos++] = p;
++    value dis = caml_debug_info;
++    while (dis != Val_emptylist) {
++      value di = Field(dis, 0);
++      code_t start = (code_t)Field(di, DI_START);
++      code_t end = start + Int_val(Field(di, DI_SIZE));
++      if (p >= start && p < end) {
++      caml_backtrace_buffer[caml_backtrace_pos++] = p;
++      break;
++      }
++      dis = Field(dis, 1);
+     }
+   }
+ }
+@@ -105,79 +164,87 @@
+ #define O_BINARY 0
+ #endif
+ 
+-static value read_debug_info(void)
++CAMLexport void caml_read_debug_info(int fd, struct exec_trailer *trail)
+ {
+   CAMLparam0();
+   CAMLlocal1(events);
+-  char * exec_name;
+-  int fd;
+-  struct exec_trailer trail;
+   struct channel * chan;
+   uint32 num_events, orig, i;
+   value evl, l;
+ 
+-  exec_name = caml_exe_name;
+-  fd = caml_attempt_open(&exec_name, &trail, 1);
+-  if (fd < 0) CAMLreturn(Val_false);
+-  caml_read_section_descriptors(fd, &trail);
+-  if (caml_seek_optional_section(fd, &trail, "DBUG") == -1) {
+-    close(fd);
+-    CAMLreturn(Val_false);
+-  }
+-  chan = caml_open_descriptor_in(fd);
+-  num_events = caml_getword(chan);
+-  events = caml_alloc(num_events, 0);
+-  for (i = 0; i < num_events; i++) {
+-    orig = caml_getword(chan);
+-    evl = caml_input_val(chan);
+-    /* Relocate events in event list */
+-    for (l = evl; l != Val_int(0); l = Field(l, 1)) {
+-      value ev = Field(l, 0);
+-      Field(ev, EV_POS) = Val_long(Long_val(Field(ev, EV_POS)) + orig);
++  caml_register_global_root(&caml_debug_info);
++
++  if (caml_seek_optional_section(fd, trail, "DBUG") == -1)
++    events = caml_alloc(0, 0);
++
++  else {
++    chan = caml_open_descriptor_in(fd);
++    num_events = caml_getword(chan);
++    events = caml_alloc(num_events, 0);
++    for (i = 0; i < num_events; i++) {
++      orig = caml_getword(chan);
++      evl = caml_input_val(chan);
++      /* Relocate events in event list */
++      for (l = evl; l != Val_int(0); l = Field(l, 1)) {
++      value ev = Field(l, 0);
++      Field(ev, EV_POS) = Val_long(Long_val(Field(ev, EV_POS)) + orig);
++      }
++      /* Record event list */
++      Store_field(events, i, evl);
+     }
+-    /* Record event list */
+-    Store_field(events, i, evl);
++    caml_release_channel(chan);
+   }
+-  caml_close_channel(chan);
+-  CAMLreturn(events);
++
++  caml_add_debug_info(caml_start_code, Val_int(caml_code_size), events);
++  CAMLreturn0;
+ }
+ 
+ /* Search the event for the given PC.  Return Val_false if not found. */
+ 
+-static value event_for_location(value events, code_t pc)
++static value event_for_location(code_t pc)
+ {
+   mlsize_t i;
+   value pos, l, ev, ev_pos, best_ev;
+ 
+   best_ev = 0;
+-  Assert(pc >= caml_start_code && pc < caml_start_code + caml_code_size);
+-  pos = Val_long((char *) pc - (char *) caml_start_code);
+-  for (i = 0; i < Wosize_val(events); i++) {
+-    for (l = Field(events, i); l != Val_int(0); l = Field(l, 1)) {
+-      ev = Field(l, 0);
+-      ev_pos = Field(ev, EV_POS);
+-      if (ev_pos == pos) return ev;
+-      /* ocamlc sometimes moves an event past a following PUSH instruction;
+-         allow mismatch by 1 instruction. */
+-      if (ev_pos == pos + 8) best_ev = ev;
++  value dis = caml_debug_info;
++  while (dis != Val_emptylist) {
++    value di = Field(dis, 0);
++    code_t start = (code_t)Field(di, DI_START);
++    code_t end = start + Int_val(Field(di, DI_SIZE));
++    if (start <= pc && pc < end) {
++      value events = Field(di, DI_EVENTS);
++      pos = Val_long((char *) pc - (char *) start);
++      for (i = 0; i < Wosize_val(events); i++) {
++      for (l = Field(events, i); l != Val_int(0); l = Field(l, 1)) {
++        ev = Field(l, 0);
++          ev_pos = Field(ev, EV_POS);
++            if (ev_pos == pos) return ev;
++              /* ocamlc sometimes moves an event past a following PUSH instruction;
++                   allow mismatch by 1 instruction. */
++                     if (ev_pos == pos + 8) best_ev = ev;
++                     }
++      }
++      if (best_ev != 0) return best_ev;
++      return Val_false;
+     }
++    dis = Field(dis, 1);
+   }
+-  if (best_ev != 0) return best_ev;
+   return Val_false;
+ }
+ 
+ /* Print the location corresponding to the given PC */
+ 
+-static void print_location(value events, int index)
++static int snprint_location(char *s, int len, int index)
+ {
+    code_t pc = caml_backtrace_buffer[index];
+   char * info;
+   value ev;
+ 
+-  ev = event_for_location(events, pc);
++  ev = event_for_location(pc);
+   if (caml_is_instruction(*pc, RAISE)) {
+     /* Ignore compiler-inserted raise */
+-    if (ev == Val_false) return;
++    if (ev == Val_false) return 0;
+     /* Initial raise if index == 0, re-raise otherwise */
+     if (index == 0)
+       info = "Raised at";
+@@ -190,7 +257,13 @@
+       info = "Called from";
+   }
+   if (ev == Val_false) {
+-    fprintf(stderr, "%s unknown location\n", info);
++    char *fmt = "%s unknown location\n";
++    if (s)
++      return snprintf(s, len, fmt, info);
++    else {
++      fprintf(stderr, fmt, info);
++      return 0;
++    }
+   } else {
+     value ev_start = Field (Field (ev, EV_LOC), LOC_START);
+     char *fname = String_val (Field (ev_start, POS_FNAME));
+@@ -199,24 +272,68 @@
+                    - Int_val (Field (ev_start, POS_BOL));
+     int endchr = Int_val (Field (Field (Field (ev, EV_LOC), LOC_END), POS_CNUM))
+                  - Int_val (Field (ev_start, POS_BOL));
+-    fprintf (stderr, "%s file \"%s\", line %d, characters %d-%d\n", info, fname,
+-             lnum, startchr, endchr);
++    char *fmt = "%s file \"%s\", line %d, characters %d-%d\n";
++    if (s)
++      return snprintf (s, len, fmt, info, fname, lnum, startchr, endchr);
++    else {
++      fprintf (stderr, fmt, info, fname,lnum, startchr, endchr);
++      return 0;
++    }
+   }
+ }
+ 
+ /* Print a backtrace */
+ 
+-CAMLexport void caml_print_exception_backtrace(void)
++static int snprint_exception_backtrace(char *s, int len)
+ {
+-  value events;
+   int i;
+ 
+-  events = read_debug_info();
+-  if (events == Val_false) {
+-    fprintf(stderr,
+-            "(Program not linked with -g, cannot print stack backtrace)\n");
+-    return;
+-  }
++  int total_chars = 0;
+   for (i = 0; i < caml_backtrace_pos; i++)
+-    print_location(events, i);
++  {
++    int chars = snprint_location(s, len, i);
++    total_chars += chars;
++    s += chars;
++    len -= chars;
++  }
++  return total_chars;
++}
++
++CAMLexport void caml_print_exception_backtrace(void)
++{
++  snprint_exception_backtrace(0, 0);
++}
++
++CAMLprim value caml_sprint_backtrace(value sv)
++{
++  if (caml_backtrace_active)
++  {
++    int len = caml_string_length(sv);
++    char *s = String_val(sv);
++    int chars = snprint_exception_backtrace(s, len);
++    return Val_int(chars);
++  }
++  else
++    return Val_int(0);
++}
++
++CAMLprim value caml_capture_backtrace(value on)
++{
++  if (Bool_val(on))
++  {
++    caml_backtrace_active = 1;
++    caml_register_global_root(&caml_backtrace_last_exn);
++  }
++  else
++  {
++    caml_backtrace_active = 0;
++    caml_remove_global_root(&caml_backtrace_last_exn);
++    caml_backtrace_last_exn = Val_unit;
++  }
++  return Val_unit;
++}
++
++CAMLprim value caml_backtrace_captured(value unit)
++{
++  return caml_backtrace_active ? Val_true : Val_false;
+ }
+diff -Naur ocaml-3.10.0/byterun/backtrace.h ocaml-3.10.0-backtrace/byterun/backtrace.h
+--- ocaml-3.10.0/byterun/backtrace.h        2007-01-29 04:11:15.000000000 -0800
++++ ocaml-3.10.0-backtrace/byterun/backtrace.h         2007-11-02 13:53:57.000000000 -0700
+@@ -17,6 +17,7 @@
+ #define CAML_BACKTRACE_H
+ 
+ #include "mlvalues.h"
++#include "exec.h"
+ 
+ CAMLextern int caml_backtrace_active;
+ CAMLextern int caml_backtrace_pos;
+@@ -28,5 +29,6 @@
+ extern void caml_stash_backtrace(value exn, code_t pc, value * sp);
+ #endif
+ CAMLextern void caml_print_exception_backtrace(void);
++CAMLextern void caml_read_debug_info(int fd, struct exec_trailer *trail);
+ 
+ #endif /* CAML_BACKTRACE_H */
+diff -Naur ocaml-3.10.0/byterun/io.c ocaml-3.10.0-backtrace/byterun/io.c
+--- ocaml-3.10.0/byterun/io.c        2007-02-25 04:38:36.000000000 -0800
++++ ocaml-3.10.0-backtrace/byterun/io.c         2007-11-02 13:53:57.000000000 -0700
+@@ -103,6 +103,12 @@
+ CAMLexport void caml_close_channel(struct channel *channel)
+ {
+   close(channel->fd);
++  caml_release_channel(channel);
++}
++
++/* release the channel but leave the file descriptor open */
++CAMLexport void caml_release_channel(struct channel *channel)
++{
+   if (channel->refcount > 0) return;
+   if (caml_channel_mutex_free != NULL) (*caml_channel_mutex_free)(channel);
+   unlink_channel(channel);
+diff -Naur ocaml-3.10.0/byterun/io.h ocaml-3.10.0-backtrace/byterun/io.h
+--- ocaml-3.10.0/byterun/io.h        2006-09-20 10:37:08.000000000 -0700
++++ ocaml-3.10.0-backtrace/byterun/io.h         2007-11-02 13:53:57.000000000 -0700
+@@ -77,6 +77,7 @@
+ CAMLextern struct channel * caml_open_descriptor_in (int);
+ CAMLextern struct channel * caml_open_descriptor_out (int);
+ CAMLextern void caml_close_channel (struct channel *);
++CAMLextern void caml_release_channel (struct channel *);
+ CAMLextern int caml_channel_binary_mode (struct channel *);
+ CAMLextern value caml_alloc_channel(struct channel *chan);
+ 
+diff -Naur ocaml-3.10.0/byterun/Makefile ocaml-3.10.0-backtrace/byterun/Makefile
+--- ocaml-3.10.0/byterun/Makefile        2007-02-23 01:29:45.000000000 -0800
++++ ocaml-3.10.0-backtrace/byterun/Makefile         2007-08-02 12:25:23.000000000 -0700
+@@ -29,7 +29,7 @@
+ 
+ DOBJS=$(OBJS:.o=.d.o) instrtrace.d.o
+ 
+-PRIMS=alloc.c array.c compare.c extern.c floats.c gc_ctrl.c hash.c \
++PRIMS=alloc.c array.c backtrace.c compare.c extern.c floats.c gc_ctrl.c hash.c \
+   intern.c interp.c ints.c io.c lexing.c md5.c meta.c obj.c parsing.c \
+   signals.c str.c sys.c terminfo.c callback.c weak.c finalise.c stacks.c \
+   dynlink.c
+diff -Naur ocaml-3.10.0/byterun/startup.c ocaml-3.10.0-backtrace/byterun/startup.c
+--- ocaml-3.10.0/byterun/startup.c        2005-09-22 07:21:50.000000000 -0700
++++ ocaml-3.10.0-backtrace/byterun/startup.c         2007-11-02 13:53:57.000000000 -0700
+@@ -392,6 +392,7 @@
+   caml_stat_free(shared_lib_path);
+   caml_stat_free(shared_libs);
+   caml_stat_free(req_prims);
++  caml_read_debug_info(fd, &trail);
+   /* Load the globals */
+   caml_seek_section(fd, &trail, "DATA");
+   chan = caml_open_descriptor_in(fd);
+diff -Naur ocaml-3.10.0/.depend ocaml-3.10.0-backtrace/.depend
+--- ocaml-3.10.0/.depend        2007-03-02 14:47:05.000000000 -0800
++++ ocaml-3.10.0-backtrace/.depend         2007-11-02 13:53:57.000000000 -0700
+@@ -274,6 +274,7 @@
+     parsing/location.cmi typing/ident.cmi typing/env.cmi parsing/asttypes.cmi 
+ bytecomp/matching.cmi: typing/typedtree.cmi parsing/location.cmi \
+     bytecomp/lambda.cmi typing/ident.cmi parsing/asttypes.cmi 
++bytecomp/meta.cmi: bytecomp/instruct.cmi 
+ bytecomp/printinstr.cmi: bytecomp/instruct.cmi 
+ bytecomp/printlambda.cmi: bytecomp/lambda.cmi 
+ bytecomp/simplif.cmi: bytecomp/lambda.cmi 
+@@ -356,8 +357,8 @@
+     typing/primitive.cmx typing/predef.cmx typing/parmatch.cmx utils/misc.cmx \
+     parsing/location.cmx bytecomp/lambda.cmx typing/ident.cmx \
+     typing/btype.cmx parsing/asttypes.cmi bytecomp/matching.cmi 
+-bytecomp/meta.cmo: bytecomp/meta.cmi 
+-bytecomp/meta.cmx: bytecomp/meta.cmi 
++bytecomp/meta.cmo: bytecomp/instruct.cmi bytecomp/meta.cmi 
++bytecomp/meta.cmx: bytecomp/instruct.cmx bytecomp/meta.cmi 
+ bytecomp/printinstr.cmo: bytecomp/printlambda.cmi parsing/location.cmi \
+     bytecomp/lambda.cmi bytecomp/instruct.cmi typing/ident.cmi \
+     bytecomp/printinstr.cmi 
+@@ -443,14 +444,14 @@
+ asmcomp/clambda.cmi: bytecomp/lambda.cmi typing/ident.cmi \
+     asmcomp/debuginfo.cmi parsing/asttypes.cmi 
+ asmcomp/closure.cmi: bytecomp/lambda.cmi asmcomp/clambda.cmi 
+-asmcomp/cmm.cmi: typing/ident.cmi asmcomp/debuginfo.cmi 
+ asmcomp/cmmgen.cmi: asmcomp/cmm.cmi asmcomp/clambda.cmi 
++asmcomp/cmm.cmi: typing/ident.cmi asmcomp/debuginfo.cmi 
+ asmcomp/codegen.cmi: asmcomp/cmm.cmi 
+ asmcomp/comballoc.cmi: asmcomp/mach.cmi 
+ asmcomp/compilenv.cmi: typing/ident.cmi asmcomp/clambda.cmi 
+ asmcomp/debuginfo.cmi: parsing/location.cmi bytecomp/lambda.cmi 
+-asmcomp/emit.cmi: asmcomp/linearize.cmi asmcomp/cmm.cmi 
+ asmcomp/emitaux.cmi: asmcomp/debuginfo.cmi 
++asmcomp/emit.cmi: asmcomp/linearize.cmi asmcomp/cmm.cmi 
+ asmcomp/interf.cmi: asmcomp/mach.cmi 
+ asmcomp/linearize.cmi: asmcomp/reg.cmi asmcomp/mach.cmi asmcomp/debuginfo.cmi 
+ asmcomp/liveness.cmi: asmcomp/mach.cmi 
+@@ -461,8 +462,8 @@
+ asmcomp/printmach.cmi: asmcomp/reg.cmi asmcomp/mach.cmi 
+ asmcomp/proc.cmi: asmcomp/reg.cmi asmcomp/mach.cmi 
+ asmcomp/reg.cmi: asmcomp/cmm.cmi 
+-asmcomp/reload.cmi: asmcomp/mach.cmi 
+ asmcomp/reloadgen.cmi: asmcomp/reg.cmi asmcomp/mach.cmi 
++asmcomp/reload.cmi: asmcomp/mach.cmi 
+ asmcomp/schedgen.cmi: asmcomp/mach.cmi asmcomp/linearize.cmi 
+ asmcomp/scheduling.cmi: asmcomp/linearize.cmi 
+ asmcomp/selectgen.cmi: utils/tbl.cmi asmcomp/reg.cmi asmcomp/mach.cmi \
+@@ -526,10 +527,6 @@
+     utils/misc.cmx bytecomp/lambda.cmx typing/ident.cmx asmcomp/debuginfo.cmx \
+     asmcomp/compilenv.cmx utils/clflags.cmx asmcomp/clambda.cmx \
+     parsing/asttypes.cmi asmcomp/closure.cmi 
+-asmcomp/cmm.cmo: typing/ident.cmi asmcomp/debuginfo.cmi asmcomp/arch.cmo \
+-    asmcomp/cmm.cmi 
+-asmcomp/cmm.cmx: typing/ident.cmx asmcomp/debuginfo.cmx asmcomp/arch.cmx \
+-    asmcomp/cmm.cmi 
+ asmcomp/cmmgen.cmo: typing/types.cmi bytecomp/switch.cmi asmcomp/proc.cmi \
+     typing/primitive.cmi utils/misc.cmi bytecomp/lambda.cmi typing/ident.cmi \
+     asmcomp/debuginfo.cmi utils/config.cmi asmcomp/compilenv.cmi \
+@@ -540,6 +537,10 @@
+     asmcomp/debuginfo.cmx utils/config.cmx asmcomp/compilenv.cmx \
+     asmcomp/cmm.cmx utils/clflags.cmx asmcomp/clambda.cmx \
+     parsing/asttypes.cmi asmcomp/arch.cmx asmcomp/cmmgen.cmi 
++asmcomp/cmm.cmo: typing/ident.cmi asmcomp/debuginfo.cmi asmcomp/arch.cmo \
++    asmcomp/cmm.cmi 
++asmcomp/cmm.cmx: typing/ident.cmx asmcomp/debuginfo.cmx asmcomp/arch.cmx \
++    asmcomp/cmm.cmi 
+ asmcomp/codegen.cmo: asmcomp/split.cmi asmcomp/spill.cmi asmcomp/reload.cmi \
+     asmcomp/reg.cmi asmcomp/printmach.cmi asmcomp/printlinear.cmi \
+     asmcomp/printcmm.cmi asmcomp/liveness.cmi asmcomp/linearize.cmi \
+@@ -564,6 +565,12 @@
+     asmcomp/debuginfo.cmi 
+ asmcomp/debuginfo.cmx: parsing/location.cmx bytecomp/lambda.cmx \
+     asmcomp/debuginfo.cmi 
++asmcomp/emitaux.cmo: asmcomp/reg.cmi asmcomp/linearize.cmi \
++    asmcomp/debuginfo.cmi asmcomp/cmm.cmi asmcomp/arch.cmo \
++    asmcomp/emitaux.cmi 
++asmcomp/emitaux.cmx: asmcomp/reg.cmx asmcomp/linearize.cmx \
++    asmcomp/debuginfo.cmx asmcomp/cmm.cmx asmcomp/arch.cmx \
++    asmcomp/emitaux.cmi 
+ asmcomp/emit.cmo: asmcomp/reg.cmi asmcomp/proc.cmi utils/misc.cmi \
+     asmcomp/mach.cmi parsing/location.cmi asmcomp/linearize.cmi \
+     asmcomp/emitaux.cmi asmcomp/debuginfo.cmi utils/config.cmi \
+@@ -574,12 +581,6 @@
+     asmcomp/emitaux.cmx asmcomp/debuginfo.cmx utils/config.cmx \
+     asmcomp/compilenv.cmx asmcomp/cmm.cmx utils/clflags.cmx asmcomp/arch.cmx \
+     asmcomp/emit.cmi 
+-asmcomp/emitaux.cmo: asmcomp/reg.cmi asmcomp/linearize.cmi \
+-    asmcomp/debuginfo.cmi asmcomp/cmm.cmi asmcomp/arch.cmo \
+-    asmcomp/emitaux.cmi 
+-asmcomp/emitaux.cmx: asmcomp/reg.cmx asmcomp/linearize.cmx \
+-    asmcomp/debuginfo.cmx asmcomp/cmm.cmx asmcomp/arch.cmx \
+-    asmcomp/emitaux.cmi 
+ asmcomp/interf.cmo: asmcomp/reg.cmi asmcomp/proc.cmi utils/misc.cmi \
+     asmcomp/mach.cmi asmcomp/interf.cmi 
+ asmcomp/interf.cmx: asmcomp/reg.cmx asmcomp/proc.cmx utils/misc.cmx \
+@@ -620,14 +621,14 @@
+     asmcomp/arch.cmx asmcomp/proc.cmi 
+ asmcomp/reg.cmo: asmcomp/cmm.cmi asmcomp/reg.cmi 
+ asmcomp/reg.cmx: asmcomp/cmm.cmx asmcomp/reg.cmi 
+-asmcomp/reload.cmo: asmcomp/reloadgen.cmi asmcomp/reg.cmi asmcomp/mach.cmi \
+-    asmcomp/cmm.cmi asmcomp/arch.cmo asmcomp/reload.cmi 
+-asmcomp/reload.cmx: asmcomp/reloadgen.cmx asmcomp/reg.cmx asmcomp/mach.cmx \
+-    asmcomp/cmm.cmx asmcomp/arch.cmx asmcomp/reload.cmi 
+ asmcomp/reloadgen.cmo: asmcomp/reg.cmi utils/misc.cmi asmcomp/mach.cmi \
+     asmcomp/reloadgen.cmi 
+ asmcomp/reloadgen.cmx: asmcomp/reg.cmx utils/misc.cmx asmcomp/mach.cmx \
+     asmcomp/reloadgen.cmi 
++asmcomp/reload.cmo: asmcomp/reloadgen.cmi asmcomp/reg.cmi asmcomp/mach.cmi \
++    asmcomp/cmm.cmi asmcomp/arch.cmo asmcomp/reload.cmi 
++asmcomp/reload.cmx: asmcomp/reloadgen.cmx asmcomp/reg.cmx asmcomp/mach.cmx \
++    asmcomp/cmm.cmx asmcomp/arch.cmx asmcomp/reload.cmi 
+ asmcomp/schedgen.cmo: asmcomp/reg.cmi utils/misc.cmi asmcomp/mach.cmi \
+     asmcomp/linearize.cmi asmcomp/cmm.cmi asmcomp/arch.cmo \
+     asmcomp/schedgen.cmi 
+@@ -686,6 +687,8 @@
+     parsing/location.cmx parsing/lexer.cmx typing/includemod.cmx \
+     typing/env.cmx typing/ctype.cmx bytecomp/bytepackager.cmx \
+     bytecomp/bytelink.cmx bytecomp/bytelibrarian.cmx driver/errors.cmi 
++driver/main_args.cmo: driver/main_args.cmi 
++driver/main_args.cmx: driver/main_args.cmi 
+ driver/main.cmo: utils/warnings.cmi utils/misc.cmi driver/main_args.cmi \
+     driver/errors.cmi utils/config.cmi driver/compile.cmi utils/clflags.cmi \
+     bytecomp/bytepackager.cmi bytecomp/bytelink.cmi \
+@@ -694,8 +697,6 @@
+     driver/errors.cmx utils/config.cmx driver/compile.cmx utils/clflags.cmx \
+     bytecomp/bytepackager.cmx bytecomp/bytelink.cmx \
+     bytecomp/bytelibrarian.cmx driver/main.cmi 
+-driver/main_args.cmo: driver/main_args.cmi 
+-driver/main_args.cmx: driver/main_args.cmi 
+ driver/optcompile.cmo: utils/warnings.cmi typing/unused_var.cmi \
+     typing/typemod.cmi typing/typedtree.cmi bytecomp/translmod.cmi \
+     bytecomp/simplif.cmi typing/printtyp.cmi bytecomp/printlambda.cmi \
+diff -Naur ocaml-3.10.0/Makefile ocaml-3.10.0-backtrace/Makefile
+--- ocaml-3.10.0/Makefile        2007-04-16 09:01:59.000000000 -0700
++++ ocaml-3.10.0-backtrace/Makefile         2007-11-02 13:53:57.000000000 -0700
+@@ -19,8 +19,8 @@
+ 
+ CAMLC=boot/ocamlrun boot/ocamlc -nostdlib -I boot
+ CAMLOPT=boot/ocamlrun ./ocamlopt -nostdlib -I stdlib
+-COMPFLAGS=-warn-error A $(INCLUDES)
+-LINKFLAGS=
++COMPFLAGS=-g -warn-error A $(INCLUDES)
++LINKFLAGS=-g
+ 
+ CAMLYACC=boot/ocamlyacc
+ YACCFLAGS=-v
+diff -Naur ocaml-3.10.0/otherlibs/dynlink/dynlink.ml ocaml-3.10.0-backtrace/otherlibs/dynlink/dynlink.ml
+--- ocaml-3.10.0/otherlibs/dynlink/dynlink.ml        2006-09-28 14:36:38.000000000 -0700
++++ ocaml-3.10.0-backtrace/otherlibs/dynlink/dynlink.ml         2007-11-02 13:53:57.000000000 -0700
+@@ -176,6 +176,13 @@
+       | _ -> assert false in
+     raise(Error(Linking_error (file_name, new_error)))
+   end;
++  let events =
++    if compunit.cu_debug = 0 then [| |]
++    else begin
++      seek_in ic compunit.cu_debug;
++      [| input_value ic |]
++    end in
++  Meta.add_debug_info code code_size events;
+   begin try
+     ignore((Meta.reify_bytecode code code_size) ())
+   with exn ->
+diff -Naur ocaml-3.10.0/stdlib/printexc.ml ocaml-3.10.0-backtrace/stdlib/printexc.ml
+--- ocaml-3.10.0/stdlib/printexc.ml        2004-01-16 07:24:02.000000000 -0800
++++ ocaml-3.10.0-backtrace/stdlib/printexc.ml         2007-11-02 13:53:57.000000000 -0700
+@@ -13,6 +13,10 @@
+ 
+ (* $Id: printexc.ml,v 1.18 2004/01/16 15:24:02 doligez Exp $ *)
+ 
++external capture_backtrace : bool -> unit = "caml_capture_backtrace";;
++external backtrace_captured : unit -> bool = "caml_backtrace_captured";;
++external sprint_backtrace : string -> int = "caml_sprint_backtrace";;
++
+ open Printf;;
+ 
+ let locfmt = format_of_string "File \"%s\", line %d, characters %d-%d: %s";;
+diff -Naur ocaml-3.10.0/stdlib/printexc.mli ocaml-3.10.0-backtrace/stdlib/printexc.mli
+--- ocaml-3.10.0/stdlib/printexc.mli        2005-10-25 11:34:07.000000000 -0700
++++ ocaml-3.10.0-backtrace/stdlib/printexc.mli         2007-12-31 15:09:41.000000000 -0800
+@@ -15,6 +15,20 @@
+ 
+ (** Facilities for printing exceptions. *)
+ 
++(* UNCOMMENT
++val capture_backtrace : bool -> unit
++(** [Printexc.capture_backtrace b] turns the capturing of backtraces
++   on if [b] is true, otherwise turns it off. *)
++
++val backtrace_captured : unit -> bool
++(** [Printexc.backtrace_captured ()] returns true iff capturing
++  backtraces is on. *)
++
++val sprint_backtrace : string -> int
++(** [Printexc.sprint_backtrace s] prints the latest exception
++   backtrace into [s] and returns the number of characters written. *)
++UNCOMMENT *)
++
+ val to_string : exn -> string
+ (** [Printexc.to_string e] returns a string representation of
+    the exception [e]. *)
+diff -Naur ocaml-3.10.0/toplevel/topdirs.ml ocaml-3.10.0-backtrace/toplevel/topdirs.ml
+--- ocaml-3.10.0/toplevel/topdirs.ml        2006-09-28 14:36:38.000000000 -0700
++++ ocaml-3.10.0-backtrace/toplevel/topdirs.ml         2007-11-02 13:53:57.000000000 -0700
+@@ -74,11 +74,19 @@
+   let initial_symtable = Symtable.current_state() in
+   Symtable.patch_object code compunit.cu_reloc;
+   Symtable.update_global_table();
++  let events =
++    if compunit.cu_debug = 0 then [| |]
++    else begin
++      seek_in ic compunit.cu_debug;
++      [| input_value ic |]
++    end in
++  Meta.add_debug_info code code_size events;
+   begin try
+     may_trace := true;
+     ignore((Meta.reify_bytecode code code_size) ());
+     may_trace := false;
+   with exn ->
++    capture_backtrace ();
+     may_trace := false;
+     Symtable.restore_state initial_symtable;
+     print_exception_outcome ppf exn;
+@@ -298,4 +306,10 @@
+              (Directive_string (parse_warnings std_out false));
+ 
+   Hashtbl.add directive_table "warn_error"
+-             (Directive_string (parse_warnings std_out true))
++             (Directive_string (parse_warnings std_out true));
++
++  Hashtbl.add directive_table "debug"
++             (Directive_bool(fun b -> Clflags.debug := b));
++
++  Hashtbl.add directive_table "capture_backtrace"
++             (Directive_bool(fun b -> Printexc.capture_backtrace b))
+diff -Naur ocaml-3.10.0/toplevel/toploop.ml ocaml-3.10.0-backtrace/toplevel/toploop.ml
+--- ocaml-3.10.0/toplevel/toploop.ml        2006-01-04 08:55:50.000000000 -0800
++++ ocaml-3.10.0-backtrace/toplevel/toploop.ml         2007-11-02 13:53:57.000000000 -0700
+@@ -113,6 +113,13 @@
+ let may_trace = ref false (* Global lock on tracing *)
+ type evaluation_outcome = Result of Obj.t | Exception of exn
+ 
++let backtrace = String.create 8192
++let backtrace_length = ref 0
++
++let capture_backtrace () =
++  if Printexc.backtrace_captured ()
++  then backtrace_length := Printexc.sprint_backtrace backtrace
++
+ let load_lambda ppf lam =
+   if !Clflags.dump_rawlambda then fprintf ppf "%a@." Printlambda.lambda lam;
+   let slam = Simplif.simplify_lambda lam in
+@@ -122,7 +129,8 @@
+     fprintf ppf "%a%a@."
+     Printinstr.instrlist init_code
+     Printinstr.instrlist fun_code;
+-  let (code, code_size, reloc) = Emitcode.to_memory init_code fun_code in
++  let (code, code_size, reloc, events) = Emitcode.to_memory init_code fun_code in
++  Meta.add_debug_info code code_size [| events |];
+   let can_free = (fun_code = []) in
+   let initial_symtable = Symtable.current_state() in
+   Symtable.patch_object code reloc;
+@@ -133,13 +141,16 @@
+     let retval = (Meta.reify_bytecode code code_size) () in
+     may_trace := false;
+     if can_free then begin
++      Meta.remove_debug_info code;
+       Meta.static_release_bytecode code code_size;
+       Meta.static_free code;
+     end;
+     Result retval
+   with x ->
++    capture_backtrace ();
+     may_trace := false;
+     if can_free then begin
++      Meta.remove_debug_info code;
+       Meta.static_release_bytecode code code_size;
+       Meta.static_free code;
+     end;
+@@ -203,7 +214,13 @@
+ let print_exception_outcome ppf exn =
+   if exn = Out_of_memory then Gc.full_major ();
+   let outv = outval_of_value !toplevel_env (Obj.repr exn) Predef.type_exn in
+-  print_out_exception ppf exn outv
++  print_out_exception ppf exn outv;
++  if Printexc.backtrace_captured()
++  then begin
++    if !backtrace_length > 0
++    then print_string (String.sub backtrace 0 !backtrace_length);
++    backtrace_length := 0
++  end
+ 
+ (* The table of toplevel directives.
+    Filled by functions from module topdirs. *)
+@@ -247,6 +264,15 @@
+               Ophr_exception (exn, outv)
+         in
+         !print_out_phrase ppf out_phr;
++        if Printexc.backtrace_captured()
++        then begin
++          if !backtrace_length > 0
++          then begin
++            pp_print_string ppf (String.sub backtrace 0 !backtrace_length);
++            pp_print_flush ppf ();
++            backtrace_length := 0;
++          end;
++        end;
+         begin match out_phr with
+         | Ophr_eval (_, _) | Ophr_signature _ -> true
+         | Ophr_exception _ -> false
+diff -Naur ocaml-3.10.0/toplevel/toploop.mli ocaml-3.10.0-backtrace/toplevel/toploop.mli
+--- ocaml-3.10.0/toplevel/toploop.mli        2004-05-15 02:59:37.000000000 -0700
++++ ocaml-3.10.0-backtrace/toplevel/toploop.mli         2007-11-02 13:53:57.000000000 -0700
+@@ -62,6 +62,7 @@
+            [use_silently] does not print them. *)
+ val eval_path: Path.t -> Obj.t
+         (* Return the toplevel object referred to by the given path *)
++val capture_backtrace: unit -> unit
+ 
+ (* Printing of values *)
+ 
