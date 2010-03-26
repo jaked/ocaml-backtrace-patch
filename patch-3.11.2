@@ -174,7 +174,7 @@ index 304fe44..2d593af 100644
 +  while (dis != Val_emptylist) {
 +    value di = Field(dis, 0);
 +    code_t start = (code_t)Field(di, DI_START);
-+    code_t end = start + Int_val(Field(di, DI_SIZE));
++    code_t end = (code_t) ((char *) start + Int_val(Field(di, DI_SIZE)));
 +    if (pc >= start && pc < end){
 +      caml_backtrace_buffer[caml_backtrace_pos++] = pc;
 +      break;
@@ -190,7 +190,7 @@ index 304fe44..2d593af 100644
 +    while (dis != Val_emptylist) {
 +      value di = Field(dis, 0);
 +      code_t start = (code_t)Field(di, DI_START);
-+      code_t end = start + Int_val(Field(di, DI_SIZE));
++      code_t end = (code_t) ((char *) start + Int_val(Field(di, DI_SIZE)));
 +      if (p >= start && p < end) {
        caml_backtrace_buffer[caml_backtrace_pos++] = p;
 +      break;
@@ -289,7 +289,7 @@ index 304fe44..2d593af 100644
 +  while (dis != Val_emptylist) {
 +    value di = Field(dis, 0);
 +    code_t start = (code_t)Field(di, DI_START);
-+    code_t end = start + Int_val(Field(di, DI_SIZE));
++    code_t end = (code_t) ((char *) start + Int_val(Field(di, DI_SIZE)));
 +    if (start <= pc && pc < end) {
 +      value events = Field(di, DI_EVENTS);
 +      pos = Val_long((char *) pc - (char *) start);
