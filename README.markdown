@@ -1,4 +1,4 @@
-=OCaml backtrace patch 0.5=
+# OCaml backtrace patch 0.5
 
 This is a patch to OCaml to show backtraces in the toplevel and from
 dynamically loaded code. For OCaml 3.10.x, adds Printexc functions for
@@ -13,7 +13,7 @@ This doesn't work with dynamically loaded native code or the native
 code toplevel.
 
 
-==To install:==
+## To install:
 
  1. unpack your OCaml tree and cd into it
 
@@ -23,7 +23,7 @@ code toplevel.
  3. build OCaml as usual
 
 
-==To use (OCaml 3.11.x):==
+## To use (OCaml 3.11.x):
 
  1. Call `Printexc.record_backtrace true` (or pass `-b` or
     `OCAMLRUNPARAM=b` to ocamlrun) to start recording backtraces.
@@ -39,7 +39,7 @@ code toplevel.
     prompt doesn't have useful line numbers though.
 
 
-==To use (OCaml 3.10.x):==
+## To use (OCaml 3.10.x):
 
  1. Call `Printexc.capture_backtrace true` (or pass `-b` or
     `OCAMLRUNPARAM=b` to ocamlrun) to start recording backtraces.
