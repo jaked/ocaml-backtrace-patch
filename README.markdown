@@ -1,6 +1,8 @@
-Patch to OCaml for backtraces in the toplevel and from dynamically
-loaded code. For OCaml 3.10.x, adds Printexc functions for recording
-backtraces which are similar to the 3.11.x ones.
+=OCaml backtrace patch 0.5=
+
+This is a patch to OCaml to show backtraces in the toplevel and from
+dynamically loaded code. For OCaml 3.10.x, adds Printexc functions for
+recording backtraces which are similar to the 3.11.x ones.
 
 Debugging information is loaded when code is loaded (stock OCaml loads
 it only when a backtrace is generated), so the memory footprint may be
@@ -11,7 +13,7 @@ This doesn't work with dynamically loaded native code or the native
 code toplevel.
 
 
-To install:
+==To install:==
 
  1. unpack your OCaml tree and cd into it
 
@@ -21,10 +23,10 @@ To install:
  3. build OCaml as usual
 
 
-To use (OCaml 3.11.x):
+==To use (OCaml 3.11.x):==
 
- 1. Call `Printexc.record_backtrace true` (or pass -b OCAMLRUNPARAM=b
-    to ocamlrun) to start recording backtraces.
+ 1. Call `Printexc.record_backtrace true` (or pass `-b` or
+    `OCAMLRUNPARAM=b` to ocamlrun) to start recording backtraces.
 
  2. Call `Printexc.get_backtrace ()` to get a backtrace, before
     another exception is raised.
@@ -37,10 +39,10 @@ To use (OCaml 3.11.x):
     prompt doesn't have useful line numbers though.
 
 
-To use (OCaml 3.10.x):
+==To use (OCaml 3.10.x):==
 
- 1. Call `Printexc.capture_backtrace true` (or pass -b OCAMLRUNPARAM=b
-    to ocamlrun) to start recording backtraces.
+ 1. Call `Printexc.capture_backtrace true` (or pass `-b` or
+    `OCAMLRUNPARAM=b` to ocamlrun) to start recording backtraces.
 
  2. Call `Printexc.sprint_backtrace buf` to print a backtrace into a
     buffer, before another exception is raised.
