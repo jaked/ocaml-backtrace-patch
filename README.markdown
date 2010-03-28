@@ -1,8 +1,9 @@
 # OCaml backtrace patch 0.5
 
 This is a patch to OCaml to show backtraces in the toplevel and from
-dynamically loaded code. For OCaml 3.10.x, adds Printexc functions for
-recording backtraces which are similar to the 3.11.x ones.
+dynamically loaded code. For OCaml 3.10.x, it adds `Printexc`
+functions for recording backtraces which are similar to the 3.11.x
+ones.
 
 Debugging information is loaded when code is loaded (stock OCaml loads
 it only when a backtrace is generated), so the memory footprint may be
@@ -15,7 +16,7 @@ code toplevel.
 
 ## To install:
 
- 1. unpack your OCaml tree and cd into it
+ 1. unpack your OCaml tree and `cd` into it
 
  2. from there, run `$PATCH/patch.sh` where `$PATCH` is the path where
     you unpacked the patch code
@@ -32,7 +33,7 @@ code toplevel.
     another exception is raised.
 
  3. From the toplevel, you can say `#record_backtrace true` (which
-    calls Printexc.record_backtrace).
+    calls `Printexc.record_backtrace`).
 
  4. From the toplevel, you can say `#debug true` to get backtraces for
     code typed at the prompt or run with `#use`. Code typed at the
@@ -48,7 +49,7 @@ code toplevel.
     buffer, before another exception is raised.
 
  3. From the toplevel, you can say `#capture_backtrace true` (which
-    calls Printexc.capture_backtrace).
+    calls `Printexc.capture_backtrace`).
 
  4. From the toplevel, you can say `#debug true` to get backtraces for
     code typed at the prompt or run with `#use`. Code typed at the
